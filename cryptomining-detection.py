@@ -46,40 +46,37 @@ y = df[label_col]
 X = X.select_dtypes(include='number')
 
 leaky_cols = [
-
+    # Hardware fingerprints
     'memswap_total', 'memswap_free', 'memswap_used',
     'memswap_percent', 'memswap_sin', 'memswap_sout',
     'fs_/_free', 'fs_/_size', 'fs_/_used', 'fs_/_percent',
     'mem_cached', 'mem_total', 'mem_free', 'mem_used',
     'mem_available', 'mem_active', 'mem_inactive',
     'mem_buffers', 'mem_shared', 'mem_percent',
+
+    # Zero variance
     'cpu_guest', 'cpu_guest_nice', 'cpu_irq', 'cpu_steal',
-    'percpu_0_cpu_number', 'percpu_0_guest',
-    'percpu_0_guest_nice', 'percpu_0_irq', 'percpu_0_steal',
+
+    # Duplicate per-core columns
+    'percpu_0_cpu_number', 'percpu_0_guest', 'percpu_0_guest_nice',
+    'percpu_0_irq', 'percpu_0_steal', 'percpu_0_idle',
+    'percpu_0_softirq', 'percpu_0_iowait', 'percpu_0_total',
+    'percpu_0_system', 'percpu_0_user', 'percpu_0_nice',
+
+    # Session fingerprints
+    'network_lo_cumulative_tx', 'network_lo_cumulative_rx',
+    'network_lo_cumulative_cx',
+
+    # Partition specific
     'diskio_sda1_write_bytes', 'diskio_sda1_read_bytes',
-    'diskio_sda1_time_since_update',
-    'diskio_sda_read_bytes',  
-    'percpu_0_idle',         
-    'percpu_0_softirq',    
-    'percpu_0_iowait',        
-    'percpu_0_total',        
-    'percpu_0_system',       
-    'percpu_0_user',         
-    'percpu_0_nice',
-     'load_min1','load_min5','load_min15','load_cpucore',
+    'diskio_sda1_time_since_update', 'diskio_sda_read_bytes',
 
-    # processes
-    'processcount_total','processcount_sleeping',
-    'processcount_thread','processcount_running',
-
-    # cpu usage
-    'cpu_system','cpu_user','cpu_iowait','cpu_nice','cpu_softirq',
-
-    # loopback traffic
-    'network_lo_cumulative_tx','network_lo_cumulative_rx',
-    'network_lo_cumulative_cx'   
-         
+    # Confirmed fingerprints
+    'cpu_idle',
+    'network_lo_time_since_update',
+    'cpu_softirq'
 ]
+
 
 X = X.drop(columns=[c for c in leaky_cols if c in X.columns])
 X = X.fillna(X.median())
@@ -213,3 +210,16 @@ print("="*80)
 
 import joblib
 joblib.dump(rf, 'cryptomining_detector.pkl')
+
+
+print(f"Decision Tree depth: {dt.get_depth()}")
+print(f"Decision Tree leaves: {dt.get_n_leaves()}")
+
+# What features is each model using?
+print("\nDecision Tree feature importances:")
+for feat, imp in sorted(zip(X_train.columns, dt.feature_importances_), key=lambda x: -x[1]):
+    print(f"  {imp:.4f}  {feat}")
+
+print("\nRandom Forest feature importances:")
+for feat, imp in sorted(zip(X_train.columns, rf.feature_importances_), key=lambda x: -x[1]):
+    print(f"  {imp:.4f}  {feat}")
