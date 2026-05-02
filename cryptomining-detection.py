@@ -6,11 +6,13 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, ConfusionMatrixDisplay
 from sklearn.metrics import roc_auc_score
+import joblib
 
 print('Libraries loaded!')
 
 df_normal = pd.read_csv('final-normal-data-set.csv')
 df_attack = pd.read_csv('final-anormal-data-set.csv')
+
 
 df_normal['label'] = 0
 df_attack['label'] = 1
@@ -44,6 +46,7 @@ y = df[label_col]
 X = X.select_dtypes(include='number')
 
 leaky_cols = [
+
     'memswap_total', 'memswap_free', 'memswap_used',
     'memswap_percent', 'memswap_sin', 'memswap_sout',
     'fs_/_free', 'fs_/_size', 'fs_/_used', 'fs_/_percent',
@@ -56,13 +59,26 @@ leaky_cols = [
     'diskio_sda1_write_bytes', 'diskio_sda1_read_bytes',
     'diskio_sda1_time_since_update',
     'diskio_sda_read_bytes',  
-'percpu_0_idle',         
-'percpu_0_softirq',    
-'percpu_0_iowait',        
-'percpu_0_total',        
-'percpu_0_system',       
-'percpu_0_user',         
-'percpu_0_nice',           
+    'percpu_0_idle',         
+    'percpu_0_softirq',    
+    'percpu_0_iowait',        
+    'percpu_0_total',        
+    'percpu_0_system',       
+    'percpu_0_user',         
+    'percpu_0_nice',
+     'load_min1','load_min5','load_min15','load_cpucore',
+
+    # processes
+    'processcount_total','processcount_sleeping',
+    'processcount_thread','processcount_running',
+
+    # cpu usage
+    'cpu_system','cpu_user','cpu_iowait','cpu_nice','cpu_softirq',
+
+    # loopback traffic
+    'network_lo_cumulative_tx','network_lo_cumulative_rx',
+    'network_lo_cumulative_cx'   
+         
 ]
 
 X = X.drop(columns=[c for c in leaky_cols if c in X.columns])
@@ -130,6 +146,8 @@ if 'mem_percent' in df.columns:
 else:
     print("  Column not present.")
 
+print(X_train.columns.tolist())
+
 print("\n[DEBUG 5] Hardware fingerprint check (mean per class):")
 fingerprint_cols = ['mem_total', 'memswap_total', 'mem_free', 'mem_used']
 for col in fingerprint_cols:
@@ -192,3 +210,6 @@ for name, preds in [('Baseline', baseline_preds), ('Decision Tree', dt_preds), (
     rec = recall_score(y_test, preds, average='weighted', zero_division=0)
     print(f"{name:<20} | {acc:<10.3f} | {f1:<10.3f} | {prec:<10.3f} | {rec:<10.3f}")
 print("="*80)
+
+import joblib
+joblib.dump(rf, 'cryptomining_detector.pkl')
