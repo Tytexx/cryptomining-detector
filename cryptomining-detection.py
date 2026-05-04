@@ -77,7 +77,6 @@ leaky_cols = [
     'cpu_softirq'
 ]
 
-
 X = X.drop(columns=[c for c in leaky_cols if c in X.columns])
 X = X.fillna(X.median())
 
