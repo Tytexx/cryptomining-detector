@@ -4,13 +4,11 @@ import pandas as pd
 import time
 import os
 
-# Load model
 rf = joblib.load('cryptomining_detector.pkl')
 print("✓ Model loaded!")
 print("Starting monitor... Press Ctrl+C to stop")
 print("="*50)
 
-# Known cryptocurrency mining pool ports
 MINING_PORTS = [3333, 4444, 8333, 14444, 45700,
                 3256, 5555, 7777, 9999, 14433]
 
@@ -84,15 +82,15 @@ def get_combined_status(attack_prob, suspicious_connections):
     network_threat = len(suspicious_connections) > 0
 
     if network_threat:
-        return "🚨 CRITICAL - Mining Pool Connection Detected!", "NETWORK"
+        return "Mining Pool Connection Detected!", "NETWORK"
 
     # ML based detection
     elif attack_prob >= 80:
-        return "🚨 CRITICAL - High Probability of Cryptomining Attack!", "ML"
+        return "High Probability of Cryptomining Attack!", "ML"
     elif attack_prob >= 60:
-        return "⚠️  WARNING - Probablity of Cryptomining Attack", "ML"
+        return "Probablity of Cryptomining Attack", "ML"
     else:
-        return "✅ NORMAL - No Threat Detected", "NORMAL"
+        return "No Threat Detected", "NORMAL"
 
 # Main loop
 try:
