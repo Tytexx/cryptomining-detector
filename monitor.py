@@ -111,7 +111,7 @@ def get_combined_status(attack_prob, suspicious_connections):
     elif attack_prob >= 80:
         return "High Probability of Cryptomining Attack!", "ML"
     elif attack_prob >= 60:
-        return "Possiblity of Cryptomining Attack", "ML"
+        return "Possibility of Cryptomining Attack", "ML"
     else:
         return "No Threat Detected", "NORMAL"
 
@@ -185,11 +185,10 @@ Write the alert now:
             print(f"[Gemini] model '{model_name}' failed: {e}", file=sys.stderr)
             continue
 
-    # Surface detailed error information for debugging
     if last_error is not None:
         print(f"[Gemini] API call failed: {last_error}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
-        # Also print the prompt (without API key) to help debugging
+        # Also print the prompt (Used for debugging, can be removed once over)
         try:
             print("[Gemini] Prompt:\n" + prompt, file=sys.stderr)
         except Exception:
@@ -215,7 +214,7 @@ try:
         print(f"\n  ML Confidence:     {attack_prob:.1f}%")
         print(f"  Detection Method:  {detection_type}")
 
-        # Generate Gemini alert if threat detected
+        # Generate Gemini alert if threat is detected
         if detection_type in ["NETWORK", "ML"] and (len(suspicious_connections) > 0 or attack_prob >= 60):
             gemini_alert = generate_gemini_alert(metrics, attack_prob, suspicious_connections, detection_type)
             if gemini_alert:
@@ -226,9 +225,9 @@ try:
                 if detection_type == "NETWORK":
                     print(f" Suspicious mining pool connections detected.")
                 elif attack_prob >= 80:
-                    print(f"  High confidence cryptomining activity detected. Investigate immediately.")
+                    print(f" High confidence cryptomining activity detected. Investigate immediately.")
                 elif attack_prob >= 60:
-                    print(f"  System metrics indicate potential cryptomining activity.")
+                    print(f" System metrics indicate potential cryptomining activity.")
 
         print(f"\n--- System Metrics ---")
         print(f"  CPU Total:     {metrics['cpu_total']:.1f}%")
