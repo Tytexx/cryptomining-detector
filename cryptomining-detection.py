@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.tree import DecisionTreeClassifier
@@ -7,6 +8,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, ConfusionMatrixDisplay
 from sklearn.metrics import roc_auc_score
 import joblib
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
 
 print('Libraries loaded!')
 
@@ -30,6 +36,126 @@ print(f'1 = Cryptomining attack traffic')
 
 label_map = {0: 'Normal', 1: 'Cryptomining Attack'}
 df['label_name'] = df['label'].map(label_map)
+
+
+signal_columns = [
+    'processcount_running',
+    'processcount_sleeping',
+    'processcount_thread',
+    'processcount_total',
+    'cpu_total',
+    'cpu_user',
+    'cpu_system',
+    'load_min1',
+    'load_min5',
+    'load_min15',
+    'mem_percent',
+    'mem_used',
+    'mem_free',
+    'memswap_percent',
+    'memswap_used'
+]
+
+
+def build_baseline_profile(normal_frame, columns):
+    profile = {}
+    for column in columns:
+        if column in normal_frame.columns:
+            series = normal_frame[column].dropna()
+            if not series.empty:
+                std = float(series.std(ddof=0))
+                profile[column] = {
+                    'mean': float(series.mean()),
+                    'std': std if std > 0 else 1.0,
+                    'p95': float(series.quantile(0.95)),
+                    'min': float(series.min()),
+                    'max': float(series.max())
+                }
+    return profile
+
+
+baseline_profile = build_baseline_profile(df_normal, signal_columns)
+
+
+def describe_case(row, baseline, top_n=4):
+    scored_signals = []
+    for column, stats in baseline.items():
+        if column in row.index:
+            value = float(row[column])
+            deviation = (value - stats['mean']) / stats['std'] if stats['std'] else 0.0
+            distance = abs(deviation)
+            scored_signals.append((column, value, stats['mean'], stats['p95'], deviation, distance))
+
+    scored_signals.sort(key=lambda item: item[5], reverse=True)
+    top_signals = scored_signals[:top_n]
+
+    triggers = []
+    for column, value, mean, p95, deviation, _ in top_signals:
+        if column.startswith('processcount_') and value > p95:
+            triggers.append(f"{column} higher than usual ({value:.1f} vs baseline p95 {p95:.1f})")
+        elif column.startswith('cpu_') and value > p95:
+            triggers.append(f"{column} above the normal range ({value:.1f} vs baseline p95 {p95:.1f})")
+        elif column.startswith('load_') and value > p95:
+            triggers.append(f"{column} elevated ({value:.2f} vs baseline p95 {p95:.2f})")
+        elif column == 'mem_percent' and value > p95:
+            triggers.append(f"memory usage is high ({value:.1f}% vs baseline p95 {p95:.1f}%)")
+
+    if not triggers and top_signals:
+        for column, value, mean, p95, deviation, _ in top_signals[:2]:
+            triggers.append(f"{column} deviates from baseline by {deviation:.1f} standard deviations")
+
+    return top_signals, triggers
+
+
+def build_local_summary(prediction_label, prediction_probability, top_signals, triggers):
+    trigger_text = '; '.join(triggers) if triggers else 'the feature profile differs from the normal baseline'
+    signal_text = ', '.join([f"{column}={value:.2f}" for column, value, *_ in top_signals]) if top_signals else 'no strong signals were identified'
+    return (
+        f"Risk level: {prediction_label}. Confidence: {prediction_probability:.1%}. "
+        f"This case looks suspicious because {trigger_text}. "
+        f"Top signals: {signal_text}. "
+        f"Recommended action: review the running processes, check for sustained CPU or load spikes, and verify whether the host is performing unexpected background work."
+    )
+
+
+def generate_claude_report(case_payload):
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key or Anthropic is None:
+        return None
+
+    client = Anthropic(api_key=api_key)
+    model_name = os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet-latest')
+
+    prompt = f"""
+You are writing a short security summary for an end user.
+
+Return exactly 3 short paragraphs:
+1. A plain-language summary of the case.
+2. A personalized explanation of why the system thinks it may be cryptomining.
+3. A few practical next steps.
+
+Be careful and do not overstate certainty. Use the provided evidence only.
+
+Case label: {case_payload['prediction_label']}
+Model confidence: {case_payload['prediction_probability']:.1%}
+Top signals:
+{case_payload['signals']}
+
+Observed triggers:
+{case_payload['triggers']}
+
+Baseline context:
+{case_payload['baseline_context']}
+""".strip()
+
+    response = client.messages.create(
+        model=model_name,
+        max_tokens=300,
+        temperature=0.2,
+        messages=[{'role': 'user', 'content': prompt}]
+    )
+
+    return ''.join(block.text for block in response.content if hasattr(block, 'text')).strip()
 
 df['label_name'].value_counts().plot(kind='bar', color=['#1D9E75','#D85A30'])
 plt.title('Network traffic class distribution')
@@ -209,6 +335,62 @@ print("="*80)
 
 import joblib
 joblib.dump(rf, 'cryptomining_detector.pkl')
+
+
+def build_case_payload(row, prediction_label, prediction_probability):
+    top_signals, triggers = describe_case(row, baseline_profile)
+    signals_text = '\n'.join(
+        [
+            f"- {column}: value={value:.2f}, baseline_mean={mean:.2f}, baseline_p95={p95:.2f}, z_score={deviation:.2f}"
+            for column, value, mean, p95, deviation, _ in top_signals
+        ]
+    )
+    baseline_context = '\n'.join(
+        [
+            f"- {column}: mean={stats['mean']:.2f}, p95={stats['p95']:.2f}, range={stats['min']:.2f} to {stats['max']:.2f}"
+            for column, stats in list(baseline_profile.items())[:6]
+        ]
+    )
+    return {
+        'prediction_label': prediction_label,
+        'prediction_probability': prediction_probability,
+        'signals': signals_text,
+        'triggers': '\n'.join(f'- {trigger}' for trigger in triggers) if triggers else '- no strong trigger exceeded baseline thresholds',
+        'baseline_context': baseline_context,
+        'top_signals': top_signals,
+        'triggers_list': triggers,
+    }
+
+
+def summarize_case(row, prediction_label, prediction_probability):
+    case_payload = build_case_payload(row, prediction_label, prediction_probability)
+    claude_summary = None
+    try:
+        claude_summary = generate_claude_report(case_payload)
+    except Exception as error:
+        print(f"Claude summary unavailable: {error}")
+
+    if claude_summary:
+        return claude_summary
+
+    return build_local_summary(
+        prediction_label,
+        prediction_probability,
+        case_payload['top_signals'],
+        case_payload['triggers_list']
+    )
+
+
+print("\n" + "="*80)
+print("SAMPLE USER REPORT")
+print("="*80)
+
+sample_row = X_test.iloc[0]
+sample_frame = pd.DataFrame([sample_row])
+sample_probability = float(rf.predict_proba(sample_frame)[0][1])
+sample_prediction = int(rf.predict(sample_frame)[0])
+sample_label = 'Potential Cryptomining' if sample_prediction == 1 else 'Likely Normal Activity'
+print(summarize_case(sample_row, sample_label, sample_probability))
 
 
 print(f"Decision Tree depth: {dt.get_depth()}")
