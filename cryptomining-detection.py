@@ -38,7 +38,7 @@ plt.ylabel('Count')
 plt.tight_layout()
 plt.savefig('chart1_distribution.png', dpi=150)
 plt.show()
-print('✓ Saved chart1_distribution.png')
+print('Saved chart1_distribution.png')
 
 label_col = 'label'
 X = df.drop(columns=[label_col, 'timestamp'])
@@ -102,68 +102,6 @@ for col in X_train.columns:
 for col, auc in sorted(aucs, key=lambda x: -x[1]):
     print(f"  {auc:.4f}  {col}")
 
-print("\n[DEBUG 1] Constant columns (zero variance):")
-constant_cols = [col for col in X_train.columns if X_train[col].nunique() == 1]
-print(f"  Found {len(constant_cols)}: {constant_cols}")
-
-print("\n[DEBUG 2] Perfect separators (zero overlap between normal/attack):")
-perfect_cols = []
-for col in X_train.columns:
-    normal_vals = X_train[y_train == 0][col]
-    attack_vals = X_train[y_train == 1][col]
-    if normal_vals.max() < attack_vals.min() or attack_vals.max() < normal_vals.min():
-        perfect_cols.append(col)
-        print(f"      Normal  → min={normal_vals.min():.4f}, max={normal_vals.max():.4f}")
-        print(f"      Attack  → min={attack_vals.min():.4f}, max={attack_vals.max():.4f}")
-if not perfect_cols:
-    print("  None found.")
-
-print("\n[DEBUG 3] Per-feature AUC (>0.95 = likely data leakage):")
-leaky_cols = []
-for col in X_train.columns:
-    try:
-        auc = roc_auc_score(y_train, X_train[col])
-        auc = max(auc, 1 - auc)
-        if auc > 0.95:
-            leaky_cols.append((col, auc))
-    except:
-        pass
-if leaky_cols:
-    for col, auc in sorted(leaky_cols, key=lambda x: -x[1]):
-        print(f"{col}: AUC={auc:.4f}")
-else:
-    print("  None found.")
-
-print("\n[DEBUG 4] mem_percent sanity check:")
-if 'mem_percent' in df.columns:
-    print(f"  min={df['mem_percent'].min()}, max={df['mem_percent'].max()}")
-    print(f"  Values > 100: {(df['mem_percent'] > 100).sum()}")
-    print(f"  Values < 0:   {(df['mem_percent'] < 0).sum()}")
-else:
-    print("  Column not present.")
-
-print(X_train.columns.tolist())
-
-print("\n[DEBUG 5] Hardware fingerprint check (mean per class):")
-fingerprint_cols = ['mem_total', 'memswap_total', 'mem_free', 'mem_used']
-for col in fingerprint_cols:
-    if col in X_train.columns:
-        normal_mean = X_train[y_train == 0][col].mean()
-        attack_mean = X_train[y_train == 1][col].mean()
-        print(f"  {col}: Normal={normal_mean:.0f}, Attack={attack_mean:.0f}")
-
-print("\n[DEBUG 6] Top 10 features by class mean ratio (higher = more suspicious):")
-ratios = []
-for col in X_train.columns:
-    n = X_train[y_train == 0][col].mean()
-    a = X_train[y_train == 1][col].mean()
-    ratio = max(n, a) / (min(abs(n), abs(a)) + 0.0001)
-    ratios.append((col, n, a, ratio))
-ratios.sort(key=lambda x: -x[3])
-for col, n, a, r in ratios[:10]:
-    print(f"  {col}: Normal={n:.4f}, Attack={a:.4f}, Ratio={r:.1f}x")
-
-print("="*60)
 
 most_variable = X_train.std().idxmax()
 threshold = X_train[most_variable].mean() + X_train[most_variable].std()
@@ -192,7 +130,7 @@ axes[1].set_title('Random Forest')
 plt.tight_layout()
 plt.savefig('chart2_confusion_matrices.png', dpi=150)
 plt.show()
-print('✓ Saved chart2_confusion_matrices.png')
+print('Saved chart2_confusion_matrices.png')
 
 print("\n" + "="*80)
 print("FINAL RESULTS")
@@ -213,11 +151,6 @@ joblib.dump(rf, 'cryptomining_detector.pkl')
 
 print(f"Decision Tree depth: {dt.get_depth()}")
 print(f"Decision Tree leaves: {dt.get_n_leaves()}")
-
-# What features is each model using?
-print("\nDecision Tree feature importances:")
-for feat, imp in sorted(zip(X_train.columns, dt.feature_importances_), key=lambda x: -x[1]):
-    print(f"  {imp:.4f}  {feat}")
 
 print("\nRandom Forest feature importances:")
 for feat, imp in sorted(zip(X_train.columns, rf.feature_importances_), key=lambda x: -x[1]):
