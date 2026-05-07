@@ -111,7 +111,7 @@ def get_combined_status(attack_prob, suspicious_connections):
     elif attack_prob >= 80:
         return "High Probability of Cryptomining Attack!", "ML"
     elif attack_prob >= 60:
-        return "Probablity of Cryptomining Attack", "ML"
+        return "Possiblity of Cryptomining Attack", "ML"
     else:
         return "No Threat Detected", "NORMAL"
 
@@ -224,9 +224,11 @@ try:
             else:
                 print(f"\n--- Security Analysis ---")
                 if detection_type == "NETWORK":
-                    print(f"  ⚠ Suspicious mining pool connections detected.")
-                else:
-                    print(f"  ⚠ System metrics indicate potential cryptomining activity.")
+                    print(f" Suspicious mining pool connections detected.")
+                elif attack_prob >= 80:
+                    print(f"  High confidence cryptomining activity detected. Investigate immediately.")
+                elif attack_prob >= 60:
+                    print(f"  System metrics indicate potential cryptomining activity.")
 
         print(f"\n--- System Metrics ---")
         print(f"  CPU Total:     {metrics['cpu_total']:.1f}%")
