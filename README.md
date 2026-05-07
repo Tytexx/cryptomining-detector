@@ -47,9 +47,7 @@ Create a `.env` file in the project root:
 GEMINI_API_KEY=your_key_here
 ```
 
-Get a free API key at [aistudio.google.com](https://aistudio.google.com). No billing required.
-
-The monitor works without this — it falls back to a static alert message if no key is set.
+The monitor works without this, it falls back to a static alert message if no key is set.
 
 ---
 
