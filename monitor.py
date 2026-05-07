@@ -3,9 +3,33 @@ import joblib
 import pandas as pd
 import time
 import os
+import sys
+import traceback
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+if os.getenv('GEMINI_API_KEY'):
+    # Avoid the Google client library preferring GOOGLE_API_KEY when both are present.
+    os.environ.pop('GOOGLE_API_KEY', None)
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 rf = joblib.load('cryptomining_detector.pkl')
 print("✓ Model loaded!")
+if genai:
+    if os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY'):
+        print("✓ Gemini API configured")
+    else:
+        print("⚠ Gemini API client installed, but no GEMINI_API_KEY or GOOGLE_API_KEY is set")
+else:
+    print("⚠ Gemini API not available (install: pip install google-genai)")
 print("Starting monitor... Press Ctrl+C to stop")
 print("="*50)
 
@@ -92,6 +116,87 @@ def get_combined_status(attack_prob, suspicious_connections):
     else:
         return "No Threat Detected", "NORMAL"
 
+
+def generate_gemini_alert(metrics, attack_prob, suspicious_connections, detection_type):
+    """Generate a Gemini-based alert summary for suspicious activity."""
+    api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    if not api_key or genai is None:
+        return None
+
+    client = genai.Client(api_key=api_key)
+    model_candidates = [
+        os.getenv('GEMINI_MODEL'),
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash-002',
+        'gemini-1.5-flash',
+    ]
+    model_candidates = [name for name in model_candidates if name]
+
+    # Build evidence for Gemini
+    evidence = []
+    if detection_type == "NETWORK" and suspicious_connections:
+        evidence.append(f"Found {len(suspicious_connections)} connection(s) to known mining pools")
+        for conn in suspicious_connections:
+            evidence.append(f"  - {conn['ip']}:{conn['port']} (status: {conn['status']})")
+    
+    if attack_prob >= 60:
+        evidence.append(f"ML model confidence: {attack_prob:.1f}%")
+        evidence.append(f"Anomalous metrics:")
+        evidence.append(f"  - CPU total: {metrics['cpu_total']:.1f}%")
+        evidence.append(f"  - Load 1min: {metrics['load_min1']:.2f}")
+        evidence.append(f"  - Processes: {metrics['processcount_total']}")
+        evidence.append(f"  - Threads: {metrics['processcount_thread']}")
+
+    evidence_text = '\n'.join(evidence) if evidence else "Generic anomaly detected"
+
+    prompt = f"""
+You are a security analyst writing a brief alert for a system administrator.
+
+Based on this live detection, provide a 2-3 sentence alert that:
+1. Clearly states the threat level and what was detected
+2. Explains why this activity is suspicious
+3. Suggests one immediate action to take
+
+Keep it actionable and brief. Do not speculate.
+
+Detection Evidence:
+{evidence_text}
+
+Write the alert now:
+""".strip()
+
+    last_error = None
+    for model_name in model_candidates:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+            try:
+                text = response.text.strip()
+                if text:
+                    return text
+            except Exception:
+                print("[Gemini] unexpected response format", file=sys.stderr)
+                print(response, file=sys.stderr)
+                return None
+        except Exception as e:
+            last_error = e
+            print(f"[Gemini] model '{model_name}' failed: {e}", file=sys.stderr)
+            continue
+
+    # Surface detailed error information for debugging
+    if last_error is not None:
+        print(f"[Gemini] API call failed: {last_error}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        # Also print the prompt (without API key) to help debugging
+        try:
+            print("[Gemini] Prompt:\n" + prompt, file=sys.stderr)
+        except Exception:
+            pass
+    return None
+
 # Main loop
 try:
     while True:
@@ -110,6 +215,19 @@ try:
         print(f"\n  {status}")
         print(f"\n  ML Confidence:     {attack_prob:.1f}%")
         print(f"  Detection Method:  {detection_type}")
+
+        # Generate Gemini alert if threat detected
+        if detection_type in ["NETWORK", "ML"] and (len(suspicious_connections) > 0 or attack_prob >= 60):
+            gemini_alert = generate_gemini_alert(metrics, attack_prob, suspicious_connections, detection_type)
+            if gemini_alert:
+                print(f"\n--- AI Security Analysis ---")
+                print(f"  {gemini_alert}")
+            else:
+                print(f"\n--- Security Analysis ---")
+                if detection_type == "NETWORK":
+                    print(f"  ⚠ Suspicious mining pool connections detected.")
+                else:
+                    print(f"  ⚠ System metrics indicate potential cryptomining activity.")
 
         print(f"\n--- System Metrics ---")
         print(f"  CPU Total:     {metrics['cpu_total']:.1f}%")

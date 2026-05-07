@@ -1,0 +1,5 @@
+joblib
+pandas
+psutil
+python-dotenv
+google-genai
