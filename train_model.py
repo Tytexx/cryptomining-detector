@@ -145,7 +145,6 @@ for name, preds in [('Baseline', baseline_preds), ('Decision Tree', dt_preds), (
     print(f"{name:<20} | {acc:<10.3f} | {f1:<10.3f} | {prec:<10.3f} | {rec:<10.3f}")
 print("="*80)
 
-import joblib
 joblib.dump(rf, 'cryptomining_detector.pkl')
 
 
