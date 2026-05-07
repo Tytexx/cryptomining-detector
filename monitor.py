@@ -13,7 +13,6 @@ except ImportError:
     pass
 
 if os.getenv('GEMINI_API_KEY'):
-    # Avoid the Google client library preferring GOOGLE_API_KEY when both are present.
     os.environ.pop('GOOGLE_API_KEY', None)
 
 try:
@@ -22,14 +21,14 @@ except ImportError:
     genai = None
 
 rf = joblib.load('cryptomining_detector.pkl')
-print("✓ Model loaded!")
+print("Model loaded!")
 if genai:
     if os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY'):
-        print("✓ Gemini API configured")
+        print("Gemini API configured")
     else:
-        print("⚠ Gemini API client installed, but no GEMINI_API_KEY or GOOGLE_API_KEY is set")
+        print("Gemini API client installed, but no GEMINI_API_KEY set")
 else:
-    print("⚠ Gemini API not available (install: pip install google-genai)")
+    print("Gemini API not available, try installing")
 print("Starting monitor... Press Ctrl+C to stop")
 print("="*50)
 
@@ -133,7 +132,6 @@ def generate_gemini_alert(metrics, attack_prob, suspicious_connections, detectio
     ]
     model_candidates = [name for name in model_candidates if name]
 
-    # Build evidence for Gemini
     evidence = []
     if detection_type == "NETWORK" and suspicious_connections:
         evidence.append(f"Found {len(suspicious_connections)} connection(s) to known mining pools")
@@ -150,6 +148,7 @@ def generate_gemini_alert(metrics, attack_prob, suspicious_connections, detectio
 
     evidence_text = '\n'.join(evidence) if evidence else "Generic anomaly detected"
 
+#Prompt for gemini, this will be the prompt that will be used to create the personalized response
     prompt = f"""
 You are a security analyst writing a brief alert for a system administrator.
 
@@ -197,7 +196,7 @@ Write the alert now:
             pass
     return None
 
-# Main loop
+#Main Program loop
 try:
     while True:
         metrics = collect_metrics()
